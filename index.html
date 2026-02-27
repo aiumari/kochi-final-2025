@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ウマリ 高知ファイナル 2025 回収率ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
+.container { max-width: 1400px; margin: 0 auto; padding: 16px; }
+.header { text-align: center; padding: 24px 0 16px; }
+.header h1 { font-size: 1.6em; color: #38bdf8; }
+.header .subtitle { font-size: 0.9em; color: #94a3b8; margin-top: 4px; }
+h2 { font-size: 1.2em; color: #7dd3fc; margin: 16px 0 8px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.card { background: #1e293b; border-radius: 8px; padding: 16px; text-align: center; border: 1px solid #334155; }
+.card .label { font-size: 0.8em; color: #94a3b8; margin-bottom: 4px; }
+.card .value { font-size: 1.8em; font-weight: 700; }
+.card .value.positive { color: #4ade80; }
+.card .value.negative { color: #f87171; }
+
+.filters { background: #1e293b; border-radius: 8px; padding: 16px; margin-bottom: 20px; border: 1px solid #334155; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-group label { font-size: 0.75em; color: #94a3b8; text-transform: uppercase; }
+.filter-group select { background: #0f172a; color: #e2e8f0; border: 1px solid #475569; border-radius: 4px; padding: 6px 10px; font-size: 0.9em; }
+.filter-group select:focus { border-color: #38bdf8; outline: none; }
+.btn { background: #2563eb; color: white; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-size: 0.85em; }
+.btn:hover { background: #1d4ed8; }
+.btn.secondary { background: #475569; }
+
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.chart-box { background: #1e293b; border-radius: 8px; padding: 16px; border: 1px solid #334155; }
+.chart-box canvas { max-height: 350px; }
+
+.summary-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 0.85em; }
+.summary-table th { background: #1e40af; color: white; padding: 8px 12px; text-align: center; position: sticky; top: 0; }
+.summary-table td { padding: 6px 12px; border-bottom: 1px solid #334155; text-align: right; }
+.summary-table td:first-child { text-align: left; font-weight: 600; }
+.summary-table tr:hover { background: #1e293b; }
+.star { color: #fbbf24; font-weight: 700; }
+
+.table-container { overflow-x: auto; margin-bottom: 20px; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.78em; white-space: nowrap; }
+.data-table th { background: #1e40af; color: white; padding: 6px 8px; cursor: pointer; position: sticky; top: 0; user-select: none; }
+.data-table th:hover { background: #2563eb; }
+.data-table th .sort-icon { margin-left: 4px; font-size: 0.7em; }
+.data-table td { padding: 4px 8px; border-bottom: 1px solid #1e293b; text-align: center; }
+.data-table tr:nth-child(even) { background: #1e293b; }
+.data-table tr:hover { background: #334155; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.tab { padding: 8px 16px; background: #334155; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 0.85em; border: 1px solid #475569; border-bottom: none; }
+.tab.active { background: #1e293b; color: #38bdf8; font-weight: 600; }
+
+.footer { text-align: center; color: #475569; margin-top: 24px; padding: 16px 0; font-size: 0.8em; border-top: 1px solid #1e293b; }
+.footer a { color: #38bdf8; text-decoration: none; }
+
+@media (max-width: 768px) {
+  .chart-grid { grid-template-columns: 1fr; }
+  .filter-row { flex-direction: column; }
+  .cards { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+  <h1>高知ファイナルレース 2025 回収率ダッシュボード</h1>
+  <div class="subtitle">競馬AIウマリ (@aiumami) | 対象: 2025年全レース | 更新: 2026-02-26</div>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<div class="filters">
+  <div class="filter-row">
+    <div class="filter-group">
+      <label>距離</label>
+      <select id="f-dist"><option value="">全て</option></select>
+    </div>
+    <div class="filter-group">
+      <label>馬場</label>
+      <select id="f-baba"><option value="">全て</option></select>
+    </div>
+    <div class="filter-group">
+      <label>記者選抜</label>
+      <select id="f-kisha">
+        <option value="">全て</option>
+        <option value="true">記者選抜のみ</option>
+        <option value="false">非記者選抜のみ</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>除外</label>
+      <select id="f-exclude">
+        <option value="">なし</option>
+        <option value="800m3sai">800m・3歳除外</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>クラス</label>
+      <select id="f-class"><option value="">全て</option></select>
+    </div>
+    <div class="filter-group" style="justify-content:flex-end;">
+      <label>&nbsp;</label>
+      <button class="btn" onclick="applyFilters()">適用</button>
+    </div>
+    <div class="filter-group" style="justify-content:flex-end;">
+      <label>&nbsp;</label>
+      <button class="btn secondary" onclick="resetFilters()">リセット</button>
+    </div>
+  </div>
+</div>
+
+<div class="chart-grid">
+  <div class="chart-box">
+    <h2>回収率（賭式別）</h2>
+    <canvas id="chart-bets"></canvas>
+  </div>
+  <div class="chart-box">
+    <h2>回収率（距離別）</h2>
+    <canvas id="chart-dist"></canvas>
+  </div>
+  <div class="chart-box">
+    <h2>回収率（馬場別）</h2>
+    <canvas id="chart-baba"></canvas>
+  </div>
+  <div class="chart-box">
+    <h2>記者選抜 vs 非記者選抜</h2>
+    <canvas id="chart-kisha"></canvas>
+  </div>
+</div>
+
+<h2>回収率サマリー (<span id="summary-count">0</span>R)</h2>
+<table class="summary-table" id="summary-table">
+  <thead><tr>
+    <th>賭式</th><th>対象R</th><th>的中R</th><th>的中率</th><th>投資額</th><th>回収額</th><th>回収率</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('detail')">レース詳細</div>
+  <div class="tab" onclick="showTab('pivot')">距離×馬場クロス集計</div>
+</div>
+
+<div id="tab-detail">
+<div class="table-container">
+<table class="data-table" id="data-table">
+  <thead><tr>
+    <th data-col="date" onclick="sortTable('date')">日付<span class="sort-icon"></span></th>
+    <th data-col="class" onclick="sortTable('class')">クラス<span class="sort-icon"></span></th>
+    <th data-col="distance" onclick="sortTable('distance')">距離<span class="sort-icon"></span></th>
+    <th data-col="baba" onclick="sortTable('baba')">馬場<span class="sort-icon"></span></th>
+    <th data-col="kisha" onclick="sortTable('kisha')">記者選抜<span class="sort-icon"></span></th>
+    <th>◎</th><th>○</th><th>▲</th><th>△</th><th>☆</th><th>紐</th>
+    <th>1着</th><th>2着</th><th>3着</th>
+    <th>単勝</th><th>馬連</th><th>馬単</th><th>3連複</th><th>3連単</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+</div>
+
+<div id="tab-pivot" style="display:none;">
+<h2>距離 × 馬場 回収率クロス集計</h2>
+<div class="filter-group" style="margin-bottom:8px;">
+  <label>賭式選択</label>
+  <select id="pivot-bet" onchange="renderPivot()"></select>
+</div>
+<table class="summary-table" id="pivot-table">
+  <thead><tr><th>距離＼馬場</th></tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+
+<div class="footer">
+  <p><a href="https://note.com/aiumami" target="_blank">note.com/aiumami</a> | <a href="https://x.com/AImarikeiba" target="_blank">@AImarikeiba</a></p>
+  <p style="margin-top:4px;">Data: 106R | Updated: 2026-02-26 11:29</p>
+</div>
+</div>
+
+<script>
+const ALL_DATA = [{"date": "2025-01-01", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 7, "taikou": 8, "anaume": 9, "renshita": 6, "star": 4, "himo": 3, "first": 8, "second": 1, "third": 2, "has_himo": true, "hits": {"単◎": 0, "単◎○": 670.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 670.0, "umaren": 3970.0, "umatan": 6800.0, "sanrenpuku": 870.0, "sanrentan": 62690.0}}, {"date": "2025-01-05", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 5, "taikou": 1, "anaume": 12, "renshita": 6, "star": 8, "himo": 11, "first": 6, "second": 5, "third": 12, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 2120.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 6010.0, "馬連BOX": 2120.0, "3連複6頭BOX": 6980.0, "3連単◎軸マ": 51090.0, "3連単5頭BOX": 51090.0, "3連単6頭BOX": 51090.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 2030.0, "umaren": 2120.0, "umatan": 6010.0, "sanrenpuku": 6980.0, "sanrentan": 51090.0}}, {"date": "2025-01-06", "class": "一般C3", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 8, "anaume": 1, "renshita": 3, "star": 7, "himo": 2, "first": 7, "second": 3, "third": 12, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 2180.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 520.0, "umaren": 2180.0, "umatan": 4420.0, "sanrenpuku": 6480.0, "sanrentan": 30290.0}}, {"date": "2025-01-08", "class": "一般C1", "distance": 1600, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 5, "taikou": 4, "anaume": 11, "renshita": 10, "star": 6, "himo": 8, "first": 8, "second": 1, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 540.0, "umaren": 2980.0, "umatan": 5140.0, "sanrenpuku": 7840.0, "sanrentan": 48220.0}}, {"date": "2025-01-12", "class": "一般C2", "distance": 1400, "baba": "不明", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 10, "anaume": 5, "renshita": 8, "star": 6, "himo": 4, "first": 4, "second": 11, "third": 7, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 220.0, "umaren": 2990.0, "umatan": 3660.0, "sanrenpuku": 13020.0, "sanrentan": 47160.0}}, {"date": "2025-01-13", "class": "一般C3", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 5, "taikou": 12, "anaume": 11, "renshita": 8, "star": 1, "himo": 9, "first": 8, "second": 2, "third": 12, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 780.0, "umaren": 2180.0, "umatan": 4790.0, "sanrenpuku": 6050.0, "sanrentan": 32790.0}}, {"date": "2025-01-15", "class": "一般C3", "distance": 1400, "baba": "不明", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 10, "anaume": 7, "renshita": 9, "star": 12, "himo": 3, "first": 4, "second": 8, "third": 3, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 640.0, "umaren": 8660.0, "umatan": 13820.0, "sanrenpuku": 48880.0, "sanrentan": 253290.0}}, {"date": "2025-01-19", "class": "3歳", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": true, "honmei": 8, "taikou": 5, "anaume": 3, "renshita": 6, "star": 10, "himo": 4, "first": 8, "second": 12, "third": 5, "has_himo": true, "hits": {"単◎": 730.0, "単◎○": 730.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 730.0, "umaren": 8470.0, "umatan": 14370.0, "sanrenpuku": 14210.0, "sanrentan": 102480.0}}, {"date": "2025-01-21", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 3, "taikou": 11, "anaume": 6, "renshita": 7, "star": 2, "himo": 1, "first": 12, "second": 6, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1150.0, "umaren": 2780.0, "umatan": 5550.0, "sanrenpuku": 18420.0, "sanrentan": 117990.0}}, {"date": "2025-01-22", "class": "一般C1", "distance": 1600, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 7, "anaume": 1, "renshita": 8, "star": 9, "himo": 6, "first": 6, "second": 4, "third": 5, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 710.0, "umaren": 2130.0, "umatan": 5420.0, "sanrenpuku": 4000.0, "sanrentan": 29380.0}}, {"date": "2025-01-26", "class": "一般C2", "distance": 1400, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 12, "taikou": 11, "anaume": 8, "renshita": 4, "star": 9, "himo": 5, "first": 7, "second": 11, "third": 12, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1670.0, "umaren": 3870.0, "umatan": 10340.0, "sanrenpuku": 5040.0, "sanrentan": 50100.0}}, {"date": "2025-01-28", "class": "一般C3", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 1, "anaume": 8, "renshita": 12, "star": 2, "himo": 10, "first": 1, "second": 6, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 920.0, "馬連◎○-ALL": 2110.0, "馬単◎○-ALL": 5020.0, "馬単◎○-ALL(マ)": 5020.0, "馬連BOX": 2110.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 920.0, "umaren": 2110.0, "umatan": 5020.0, "sanrenpuku": 8530.0, "sanrentan": 55580.0}}, {"date": "2025-01-29", "class": "一般C3", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 6, "anaume": 1, "renshita": 11, "star": 12, "himo": 10, "first": 7, "second": 11, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1420.0, "umaren": 3240.0, "umatan": 8260.0, "sanrenpuku": 26030.0, "sanrentan": 181450.0}}, {"date": "2025-02-02", "class": "3歳", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": true, "honmei": 3, "taikou": 7, "anaume": 5, "renshita": 8, "star": 11, "himo": 6, "first": 5, "second": 2, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 250.0, "umaren": 490.0, "umatan": 800.0, "sanrenpuku": 3030.0, "sanrentan": 9390.0}}, {"date": "2025-02-04", "class": "一般C3", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 12, "anaume": 7, "renshita": 1, "star": 4, "himo": null, "first": 1, "second": 2, "third": 9, "has_himo": false, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 700, "馬単◎○-ALL": 800, "馬単◎○-ALL(マ)": 1600, "馬連BOX": 1000, "3連複6頭BOX": 1000, "3連単◎軸マ": 3600, "3連単5頭BOX": 6000, "3連単6頭BOX": 6000}, "payouts": {"tansho": 820.0, "umaren": 6550.0, "umatan": 13570.0, "sanrenpuku": 34350.0, "sanrentan": 179280.0}}, {"date": "2025-02-09", "class": "一般C2", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 11, "anaume": 6, "renshita": 12, "star": 3, "himo": 8, "first": 11, "second": 6, "third": 5, "has_himo": true, "hits": {"単◎": 0, "単◎○": 510.0, "馬連◎○-ALL": 7070.0, "馬単◎○-ALL": 10750.0, "馬単◎○-ALL(マ)": 10750.0, "馬連BOX": 7070.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 510.0, "umaren": 7070.0, "umatan": 10750.0, "sanrenpuku": 32790.0, "sanrentan": 146240.0}}, {"date": "2025-02-11", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 11, "taikou": 5, "anaume": 10, "renshita": 12, "star": 4, "himo": 3, "first": 3, "second": 2, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1800.0, "umaren": 18920.0, "umatan": 34620.0, "sanrenpuku": 33100.0, "sanrentan": 262300.0}}, {"date": "2025-02-12", "class": "一般C3", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 10, "taikou": 1, "anaume": 9, "renshita": 5, "star": 2, "himo": 6, "first": 12, "second": 10, "third": 7, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 420.0, "umaren": 1680.0, "umatan": 2780.0, "sanrenpuku": 2890.0, "sanrentan": 14280.0}}, {"date": "2025-02-16", "class": "3歳", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": true, "honmei": 7, "taikou": 9, "anaume": 11, "renshita": 2, "star": 6, "himo": 4, "first": 3, "second": 6, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 2100.0, "umaren": 5660.0, "umatan": 11620.0, "sanrenpuku": 7840.0, "sanrentan": 73770.0}}, {"date": "2025-02-18", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 8, "anaume": 6, "renshita": 5, "star": 9, "himo": 3, "first": 9, "second": 2, "third": 10, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 580.0, "umaren": 2960.0, "umatan": 5280.0, "sanrenpuku": 4900.0, "sanrentan": 29630.0}}, {"date": "2025-02-19", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 11, "taikou": 5, "anaume": 12, "renshita": 4, "star": 6, "himo": 8, "first": 10, "second": 5, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1260.0, "umaren": 2930.0, "umatan": 6380.0, "sanrenpuku": 8740.0, "sanrentan": 57070.0}}, {"date": "2025-02-23", "class": "一般C2", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 9, "taikou": 8, "anaume": 1, "renshita": 5, "star": 7, "himo": 2, "first": 7, "second": 5, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 2800.0, "3連複6頭BOX": 9300.0, "3連単◎軸マ": 53770.0, "3連単5頭BOX": 53770.0, "3連単6頭BOX": 53770.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 460.0, "umaren": 2800.0, "umatan": 6040.0, "sanrenpuku": 9300.0, "sanrentan": 53770.0}}, {"date": "2025-02-24", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 7, "taikou": 6, "anaume": 1, "renshita": 12, "star": 2, "himo": 11, "first": 6, "second": 12, "third": 2, "has_himo": true, "hits": {"単◎": 0, "単◎○": 650.0, "馬連◎○-ALL": 2940.0, "馬単◎○-ALL": 4600.0, "馬単◎○-ALL(マ)": 4600.0, "馬連BOX": 2940.0, "3連複6頭BOX": 8150.0, "3連単◎軸マ": 0, "3連単5頭BOX": 42910.0, "3連単6頭BOX": 42910.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 650.0, "umaren": 2940.0, "umatan": 4600.0, "sanrenpuku": 8150.0, "sanrentan": 42910.0}}, {"date": "2025-02-25", "class": "一般C1", "distance": 1400, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 10, "taikou": 8, "anaume": 9, "renshita": 5, "star": 7, "himo": 1, "first": 3, "second": 12, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 670.0, "umaren": 2030.0, "umatan": 3820.0, "sanrenpuku": 18190.0, "sanrentan": 118910.0}}, {"date": "2025-03-02", "class": "一般C2", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 8, "anaume": 4, "renshita": 3, "star": 2, "himo": 10, "first": 7, "second": 11, "third": 10, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 750.0, "umaren": 7350.0, "umatan": 13380.0, "sanrenpuku": 9060.0, "sanrentan": 89220.0}}, {"date": "2025-03-04", "class": "一般C3", "distance": 1400, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 11, "taikou": 12, "anaume": 4, "renshita": 6, "star": 10, "himo": 1, "first": 1, "second": 11, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 2240.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 4110.0, "馬連BOX": 2240.0, "3連複6頭BOX": 14420.0, "3連単◎軸マ": 57790.0, "3連単5頭BOX": 0, "3連単6頭BOX": 57790.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 770.0, "umaren": 2240.0, "umatan": 4110.0, "sanrenpuku": 14420.0, "sanrentan": 57790.0}}, {"date": "2025-03-05", "class": "一般C3", "distance": 1400, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 6, "anaume": 8, "renshita": 8, "star": 7, "himo": 12, "first": 1, "second": 12, "third": 11, "has_himo": true, "hits": {"単◎": 300.0, "単◎○": 300.0, "馬連◎○-ALL": 1960.0, "馬単◎○-ALL": 2840.0, "馬単◎○-ALL(マ)": 2840.0, "馬連BOX": 1960.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 300.0, "umaren": 1960.0, "umatan": 2840.0, "sanrenpuku": 11490.0, "sanrentan": 47350.0}}, {"date": "2025-03-09", "class": "一般C2", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 11, "anaume": 1, "renshita": 7, "star": 6, "himo": 8, "first": 1, "second": 2, "third": 8, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 1350.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 3290.0, "馬連BOX": 1350.0, "3連複6頭BOX": 10010.0, "3連単◎軸マ": 59240.0, "3連単5頭BOX": 0, "3連単6頭BOX": 59240.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 830.0, "umaren": 1350.0, "umatan": 3290.0, "sanrenpuku": 10010.0, "sanrentan": 59240.0}}, {"date": "2025-03-11", "class": "一般C3", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 11, "taikou": 4, "anaume": 9, "renshita": 8, "star": 1, "himo": 3, "first": 1, "second": 12, "third": 11, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 890.0, "umaren": 2910.0, "umatan": 6690.0, "sanrenpuku": 3420.0, "sanrentan": 27450.0}}, {"date": "2025-03-12", "class": "一般C1", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 8, "taikou": 2, "anaume": 11, "renshita": 6, "star": 12, "himo": 10, "first": 4, "second": 2, "third": 11, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1110.0, "umaren": 3080.0, "umatan": 6300.0, "sanrenpuku": 23650.0, "sanrentan": 136200.0}}, {"date": "2025-03-16", "class": "一般C2", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 11, "taikou": 8, "anaume": 5, "renshita": 2, "star": 7, "himo": 1, "first": 11, "second": 12, "third": 9, "has_himo": true, "hits": {"単◎": 550.0, "単◎○": 550.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 550.0, "umaren": 1750.0, "umatan": 3340.0, "sanrenpuku": 10320.0, "sanrentan": 49720.0}}, {"date": "2025-03-18", "class": "一般C3", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 7, "taikou": 9, "anaume": 6, "renshita": 12, "star": 11, "himo": 3, "first": 12, "second": 5, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 510.0, "umaren": 4010.0, "umatan": 6210.0, "sanrenpuku": 9390.0, "sanrentan": 68510.0}}, {"date": "2025-03-19", "class": "一般C1", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 2, "anaume": 5, "renshita": 10, "star": 8, "himo": 9, "first": 7, "second": 10, "third": 2, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 3080.0, "umaren": 8410.0, "umatan": 21510.0, "sanrenpuku": 19050.0, "sanrentan": 207690.0}}, {"date": "2025-03-23", "class": "3歳", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": true, "honmei": 6, "taikou": 5, "anaume": 3, "renshita": 2, "star": 1, "himo": 10, "first": 4, "second": 8, "third": 2, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 4960.0, "umaren": 16720.0, "umatan": 47410.0, "sanrenpuku": 98230.0, "sanrentan": 749040.0}}, {"date": "2025-03-25", "class": "一般B", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 7, "anaume": 5, "renshita": 1, "star": 3, "himo": 9, "first": 5, "second": 8, "third": 10, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 360.0, "umaren": 1040.0, "umatan": 1710.0, "sanrenpuku": 3650.0, "sanrentan": 13990.0}}, {"date": "2025-03-26", "class": "一般C3", "distance": 1400, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 8, "anaume": 7, "renshita": 11, "star": 3, "himo": 12, "first": 8, "second": 12, "third": 5, "has_himo": true, "hits": {"単◎": 0, "単◎○": 1300.0, "馬連◎○-ALL": 5810.0, "馬単◎○-ALL": 14120.0, "馬単◎○-ALL(マ)": 14120.0, "馬連BOX": 5810.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1300.0, "umaren": 5810.0, "umatan": 14120.0, "sanrenpuku": 26920.0, "sanrentan": 178300.0}}, {"date": "2025-04-05", "class": "一般C2", "distance": 1400, "baba": "稍重", "kisha": false, "is_3sai": false, "honmei": 9, "taikou": 6, "anaume": 12, "renshita": 4, "star": 11, "himo": 7, "first": 9, "second": 8, "third": 7, "has_himo": true, "hits": {"単◎": 1180.0, "単◎○": 1180.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1180.0, "umaren": 2190.0, "umatan": 5450.0, "sanrenpuku": 820.0, "sanrentan": 12200.0}}, {"date": "2025-04-06", "class": "一般C1", "distance": 1400, "baba": "稍重", "kisha": false, "is_3sai": false, "honmei": 1, "taikou": 3, "anaume": 11, "renshita": 2, "star": 8, "himo": 10, "first": 3, "second": 2, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 170.0, "馬連◎○-ALL": 1400.0, "馬単◎○-ALL": 1920.0, "馬単◎○-ALL(マ)": 1920.0, "馬連BOX": 1400.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 170.0, "umaren": 1400.0, "umatan": 1920.0, "sanrenpuku": 4240.0, "sanrentan": 13390.0}}, {"date": "2025-04-12", "class": "一般C3", "distance": 1300, "baba": "稍重", "kisha": false, "is_3sai": false, "honmei": 12, "taikou": 2, "anaume": 9, "renshita": 7, "star": 8, "himo": 4, "first": 2, "second": 12, "third": 7, "has_himo": true, "hits": {"単◎": 0, "単◎○": 510.0, "馬連◎○-ALL": 410.0, "馬単◎○-ALL": 1430.0, "馬単◎○-ALL(マ)": 1430.0, "馬連BOX": 410.0, "3連複6頭BOX": 430.0, "3連単◎軸マ": 3850.0, "3連単5頭BOX": 3850.0, "3連単6頭BOX": 3850.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 510.0, "umaren": 410.0, "umatan": 1430.0, "sanrenpuku": 430.0, "sanrentan": 3850.0}}, {"date": "2025-04-13", "class": "一般C3", "distance": 1300, "baba": "不良", "kisha": false, "is_3sai": false, "honmei": 1, "taikou": 4, "anaume": 5, "renshita": 12, "star": 11, "himo": 8, "first": 1, "second": 4, "third": 5, "has_himo": true, "hits": {"単◎": 190.0, "単◎○": 190.0, "馬連◎○-ALL": 610.0, "馬単◎○-ALL": 800.0, "馬単◎○-ALL(マ)": 800.0, "馬連BOX": 610.0, "3連複6頭BOX": 760.0, "3連単◎軸マ": 2600.0, "3連単5頭BOX": 2600.0, "3連単6頭BOX": 2600.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 190.0, "umaren": 610.0, "umatan": 800.0, "sanrenpuku": 760.0, "sanrentan": 2600.0}}, {"date": "2025-04-19", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 8, "taikou": 6, "anaume": 2, "renshita": 4, "star": 10, "himo": 3, "first": 11, "second": 9, "third": 5, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 560.0, "umaren": 2920.0, "umatan": 5440.0, "sanrenpuku": 11820.0, "sanrentan": 56570.0}}, {"date": "2025-04-20", "class": "一般C1", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 11, "taikou": 4, "anaume": 9, "renshita": 1, "star": 2, "himo": 12, "first": 9, "second": 3, "third": 7, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1980.0, "umaren": 3560.0, "umatan": 7690.0, "sanrenpuku": 6840.0, "sanrentan": 58580.0}}, {"date": "2025-04-26", "class": "3歳", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": true, "honmei": 1, "taikou": 4, "anaume": 9, "renshita": 2, "star": 12, "himo": 3, "first": 9, "second": 1, "third": 7, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 2670.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 5180.0, "馬連BOX": 2670.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 770.0, "umaren": 2670.0, "umatan": 5180.0, "sanrenpuku": 11580.0, "sanrentan": 67690.0}}, {"date": "2025-04-27", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 10, "taikou": 2, "anaume": 7, "renshita": 1, "star": 9, "himo": 5, "first": 12, "second": 2, "third": 3, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 430.0, "umaren": 1860.0, "umatan": 2930.0, "sanrenpuku": 4600.0, "sanrentan": 21130.0}}, {"date": "2025-05-03", "class": "一般C2", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 5, "taikou": 12, "anaume": 9, "renshita": 3, "star": 11, "himo": 2, "first": 2, "second": 5, "third": 7, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 3460.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 6590.0, "馬連BOX": 3460.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 740.0, "umaren": 3460.0, "umatan": 6590.0, "sanrenpuku": 15620.0, "sanrentan": 74750.0}}, {"date": "2025-05-04", "class": "一般C3", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 7, "taikou": 1, "anaume": 2, "renshita": 4, "star": 11, "himo": 3, "first": 7, "second": 2, "third": 4, "has_himo": true, "hits": {"単◎": 570.0, "単◎○": 570.0, "馬連◎○-ALL": 2340.0, "馬単◎○-ALL": 4750.0, "馬単◎○-ALL(マ)": 4750.0, "馬連BOX": 2340.0, "3連複6頭BOX": 12920.0, "3連単◎軸マ": 61630.0, "3連単5頭BOX": 61630.0, "3連単6頭BOX": 61630.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 570.0, "umaren": 2340.0, "umatan": 4750.0, "sanrenpuku": 12920.0, "sanrentan": 61630.0}}, {"date": "2025-05-10", "class": "一般C3", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 12, "anaume": 3, "renshita": 9, "star": 11, "himo": 5, "first": 10, "second": 5, "third": 1, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 400.0, "umaren": 2220.0, "umatan": 3640.0, "sanrenpuku": 19010.0, "sanrentan": 101360.0}}, {"date": "2025-05-11", "class": "一般C3", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 7, "taikou": 3, "anaume": 12, "renshita": 9, "star": 1, "himo": 8, "first": 7, "second": 4, "third": 12, "has_himo": true, "hits": {"単◎": 440.0, "単◎○": 440.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 440.0, "umaren": 1360.0, "umatan": 2430.0, "sanrenpuku": 5980.0, "sanrentan": 26900.0}}, {"date": "2025-05-17", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 8, "anaume": 4, "renshita": 2, "star": 10, "himo": 5, "first": 5, "second": 9, "third": 3, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1250.0, "umaren": 8140.0, "umatan": 17340.0, "sanrenpuku": 32550.0, "sanrentan": 243450.0}}, {"date": "2025-05-18", "class": "一般C1", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 12, "taikou": 1, "anaume": 5, "renshita": 4, "star": 8, "himo": 2, "first": 12, "second": 7, "third": 1, "has_himo": true, "hits": {"単◎": 1170.0, "単◎○": 1170.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1170.0, "umaren": 5490.0, "umatan": 11390.0, "sanrenpuku": 17500.0, "sanrentan": 138960.0}}, {"date": "2025-05-25", "class": "一般C3", "distance": 1400, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 4, "taikou": 1, "anaume": 9, "renshita": 7, "star": 3, "himo": 5, "first": 3, "second": 9, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 14040.0, "3連複6頭BOX": 19810.0, "3連単◎軸マ": 209920.0, "3連単5頭BOX": 209920.0, "3連単6頭BOX": 209920.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1310.0, "umaren": 14040.0, "umatan": 25000.0, "sanrenpuku": 19810.0, "sanrentan": 209920.0}}, {"date": "2025-05-31", "class": "一般C2", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 3, "taikou": 12, "anaume": 8, "renshita": 2, "star": 11, "himo": 5, "first": 9, "second": 7, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1130.0, "umaren": 8300.0, "umatan": 18490.0, "sanrenpuku": 68600.0, "sanrentan": 346430.0}}, {"date": "2025-06-01", "class": "一般C3", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 3, "anaume": 1, "renshita": 5, "star": 10, "himo": 7, "first": 12, "second": 1, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 600.0, "umaren": 4210.0, "umatan": 7250.0, "sanrenpuku": 10350.0, "sanrentan": 74610.0}}, {"date": "2025-06-07", "class": "3歳", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": true, "honmei": 2, "taikou": 1, "anaume": 4, "renshita": 7, "star": 8, "himo": 12, "first": 7, "second": 12, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 1000.0, "3連複6頭BOX": 3690.0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 16860.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 490.0, "umaren": 1000.0, "umatan": 2310.0, "sanrenpuku": 3690.0, "sanrentan": 16860.0}}, {"date": "2025-06-08", "class": "一般C3", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 8, "taikou": 11, "anaume": 12, "renshita": 4, "star": 6, "himo": 7, "first": 8, "second": 1, "third": 2, "has_himo": true, "hits": {"単◎": 470.0, "単◎○": 470.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 470.0, "umaren": 5680.0, "umatan": 7830.0, "sanrenpuku": 11780.0, "sanrentan": 63930.0}}, {"date": "2025-06-14", "class": "一般C3", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 9, "anaume": 7, "renshita": 1, "star": 4, "himo": 11, "first": 6, "second": 4, "third": 5, "has_himo": true, "hits": {"単◎": 840.0, "単◎○": 840.0, "馬連◎○-ALL": 3480.0, "馬単◎○-ALL": 6880.0, "馬単◎○-ALL(マ)": 6880.0, "馬連BOX": 3480.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 840.0, "umaren": 3480.0, "umatan": 6880.0, "sanrenpuku": 30410.0, "sanrentan": 140800.0}}, {"date": "2025-06-15", "class": "一般C1", "distance": 1400, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 5, "taikou": 1, "anaume": 9, "renshita": 2, "star": 11, "himo": 4, "first": 5, "second": 4, "third": 3, "has_himo": true, "hits": {"単◎": 700.0, "単◎○": 700.0, "馬連◎○-ALL": 1910.0, "馬単◎○-ALL": 3880.0, "馬単◎○-ALL(マ)": 3880.0, "馬連BOX": 1910.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 700.0, "umaren": 1910.0, "umatan": 3880.0, "sanrenpuku": 5250.0, "sanrentan": 31590.0}}, {"date": "2025-06-21", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 8, "taikou": 9, "anaume": 3, "renshita": 10, "star": 12, "himo": 1, "first": 4, "second": 3, "third": 11, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 800.0, "umaren": 3620.0, "umatan": 7320.0, "sanrenpuku": 4230.0, "sanrentan": 29620.0}}, {"date": "2025-06-22", "class": "一般C3", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 4, "anaume": 5, "renshita": 6, "star": 8, "himo": 2, "first": 2, "second": 6, "third": 11, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 6660.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1520.0, "umaren": 6660.0, "umatan": 12580.0, "sanrenpuku": 16400.0, "sanrentan": 109380.0}}, {"date": "2025-06-28", "class": "一般C2", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 7, "anaume": 9, "renshita": 4, "star": 6, "himo": 8, "first": 8, "second": 11, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 910.0, "umaren": 1580.0, "umatan": 3380.0, "sanrenpuku": 4370.0, "sanrentan": 25270.0}}, {"date": "2025-06-29", "class": "一般C3", "distance": 1600, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 5, "taikou": 2, "anaume": 9, "renshita": 11, "star": 7, "himo": 10, "first": 9, "second": 4, "third": 3, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1960.0, "umaren": 3230.0, "umatan": 8100.0, "sanrenpuku": 9130.0, "sanrentan": 66240.0}}, {"date": "2025-07-05", "class": "3歳", "distance": 1400, "baba": "良", "kisha": true, "is_3sai": true, "honmei": 4, "taikou": 8, "anaume": 3, "renshita": 1, "star": 6, "himo": 9, "first": 3, "second": 11, "third": 12, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 620.0, "umaren": 4080.0, "umatan": 7000.0, "sanrenpuku": 21190.0, "sanrentan": 124500.0}}, {"date": "2025-07-06", "class": "一般C3", "distance": 800, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 8, "anaume": 4, "renshita": 7, "star": 6, "himo": 10, "first": 8, "second": 9, "third": 11, "has_himo": true, "hits": {"単◎": 0, "単◎○": 350.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 350.0, "umaren": 1000.0, "umatan": 1730.0, "sanrenpuku": 1350.0, "sanrentan": 7170.0}}, {"date": "2025-07-12", "class": "一般C3", "distance": 1300, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 10, "taikou": 1, "anaume": 6, "renshita": 3, "star": 2, "himo": 5, "first": 6, "second": 10, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 7490.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 16260.0, "馬連BOX": 7490.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 2090.0, "umaren": 7490.0, "umatan": 16260.0, "sanrenpuku": 16190.0, "sanrentan": 108570.0}}, {"date": "2025-07-13", "class": "一般C1", "distance": 1400, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 10, "taikou": 4, "anaume": 12, "renshita": 6, "star": 8, "himo": 11, "first": 4, "second": 8, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 2520.0, "馬連◎○-ALL": 6850.0, "馬単◎○-ALL": 18680.0, "馬単◎○-ALL(マ)": 18680.0, "馬連BOX": 6850.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 2520.0, "umaren": 6850.0, "umatan": 18680.0, "sanrenpuku": 15740.0, "sanrentan": 132010.0}}, {"date": "2025-07-19", "class": "一般C3", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 4, "taikou": 7, "anaume": 2, "renshita": 11, "star": 10, "himo": 6, "first": 4, "second": 10, "third": 11, "has_himo": true, "hits": {"単◎": 540.0, "単◎○": 540.0, "馬連◎○-ALL": 11580.0, "馬単◎○-ALL": 16180.0, "馬単◎○-ALL(マ)": 16180.0, "馬連BOX": 11580.0, "3連複6頭BOX": 14730.0, "3連単◎軸マ": 120020.0, "3連単5頭BOX": 120020.0, "3連単6頭BOX": 120020.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 540.0, "umaren": 11580.0, "umatan": 16180.0, "sanrenpuku": 14730.0, "sanrentan": 120020.0}}, {"date": "2025-07-20", "class": "3歳", "distance": 800, "baba": "不良", "kisha": true, "is_3sai": true, "honmei": 11, "taikou": 3, "anaume": 9, "renshita": 6, "star": 2, "himo": 12, "first": 12, "second": 9, "third": 2, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 880.0, "3連複6頭BOX": 2440.0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 13750.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 550.0, "umaren": 880.0, "umatan": 1980.0, "sanrenpuku": 2440.0, "sanrentan": 13750.0}}, {"date": "2025-07-26", "class": "一般C2", "distance": 1600, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 8, "taikou": 3, "anaume": 5, "renshita": 11, "star": 2, "himo": 9, "first": 8, "second": 2, "third": 3, "has_himo": true, "hits": {"単◎": 350.0, "単◎○": 350.0, "馬連◎○-ALL": 1950.0, "馬単◎○-ALL": 4070.0, "馬単◎○-ALL(マ)": 4070.0, "馬連BOX": 1950.0, "3連複6頭BOX": 6780.0, "3連単◎軸マ": 40720.0, "3連単5頭BOX": 40720.0, "3連単6頭BOX": 40720.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 350.0, "umaren": 1950.0, "umatan": 4070.0, "sanrenpuku": 6780.0, "sanrentan": 40720.0}}, {"date": "2025-07-27", "class": "一般C3", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 12, "anaume": 6, "renshita": 7, "star": 3, "himo": 8, "first": 3, "second": 12, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 7120.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 16100.0, "馬連BOX": 7120.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 990.0, "umaren": 7120.0, "umatan": 16100.0, "sanrenpuku": 57740.0, "sanrentan": 422470.0}}, {"date": "2025-08-02", "class": "3歳", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": true, "honmei": 8, "taikou": 9, "anaume": 10, "renshita": 2, "star": 1, "himo": 11, "first": 6, "second": 8, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 550.0, "umaren": 1790.0, "umatan": 3620.0, "sanrenpuku": 2310.0, "sanrentan": 13650.0}}, {"date": "2025-08-03", "class": "一般C3", "distance": 1400, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 11, "taikou": 2, "anaume": 1, "renshita": 6, "star": 3, "himo": 8, "first": 5, "second": 9, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 300.0, "umaren": 2630.0, "umatan": 3690.0, "sanrenpuku": 15250.0, "sanrentan": 55220.0}}, {"date": "2025-09-06", "class": "一般C2", "distance": 1400, "baba": "重", "kisha": false, "is_3sai": false, "honmei": 2, "taikou": 4, "anaume": 10, "renshita": 1, "star": 5, "himo": 11, "first": 11, "second": 1, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 900.0, "3連複6頭BOX": 930.0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 4390.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 310.0, "umaren": 900.0, "umatan": 1500.0, "sanrenpuku": 930.0, "sanrentan": 4390.0}}, {"date": "2025-09-07", "class": "一般C1", "distance": 1600, "baba": "重", "kisha": false, "is_3sai": false, "honmei": 1, "taikou": 9, "anaume": 7, "renshita": 6, "star": 10, "himo": 8, "first": 7, "second": 10, "third": 1, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 1370.0, "3連複6頭BOX": 1370.0, "3連単◎軸マ": 8410.0, "3連単5頭BOX": 8410.0, "3連単6頭BOX": 8410.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 480.0, "umaren": 1370.0, "umatan": 2440.0, "sanrenpuku": 1370.0, "sanrentan": 8410.0}}, {"date": "2025-09-13", "class": "一般C3", "distance": 1300, "baba": "重", "kisha": false, "is_3sai": false, "honmei": 12, "taikou": 9, "anaume": 10, "renshita": 3, "star": 2, "himo": 7, "first": 12, "second": 9, "third": 7, "has_himo": true, "hits": {"単◎": 340.0, "単◎○": 340.0, "馬連◎○-ALL": 510.0, "馬単◎○-ALL": 1040.0, "馬単◎○-ALL(マ)": 1040.0, "馬連BOX": 510.0, "3連複6頭BOX": 330.0, "3連単◎軸マ": 2880.0, "3連単5頭BOX": 0, "3連単6頭BOX": 2880.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 340.0, "umaren": 510.0, "umatan": 1040.0, "sanrenpuku": 330.0, "sanrentan": 2880.0}}, {"date": "2025-09-14", "class": "3歳", "distance": 1400, "baba": "重", "kisha": false, "is_3sai": true, "honmei": 1, "taikou": 6, "anaume": 10, "renshita": 11, "star": 4, "himo": 8, "first": 10, "second": 4, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 1330.0, "3連複6頭BOX": 5990.0, "3連単◎軸マ": 0, "3連単5頭BOX": 39480.0, "3連単6頭BOX": 39480.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 790.0, "umaren": 1330.0, "umatan": 3060.0, "sanrenpuku": 5990.0, "sanrentan": 39480.0}}, {"date": "2025-09-21", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 8, "anaume": 12, "renshita": 9, "star": 11, "himo": 4, "first": 8, "second": 9, "third": 3, "has_himo": true, "hits": {"単◎": 0, "単◎○": 430.0, "馬連◎○-ALL": 2840.0, "馬単◎○-ALL": 5090.0, "馬単◎○-ALL(マ)": 5090.0, "馬連BOX": 2840.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 430.0, "umaren": 2840.0, "umatan": 5090.0, "sanrenpuku": 8770.0, "sanrentan": 48320.0}}, {"date": "2025-09-23", "class": "一般C1", "distance": 1400, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 9, "taikou": 1, "anaume": 11, "renshita": 5, "star": 8, "himo": 4, "first": 9, "second": 4, "third": 5, "has_himo": true, "hits": {"単◎": 620.0, "単◎○": 620.0, "馬連◎○-ALL": 2820.0, "馬単◎○-ALL": 4990.0, "馬単◎○-ALL(マ)": 4990.0, "馬連BOX": 2820.0, "3連複6頭BOX": 10150.0, "3連単◎軸マ": 58150.0, "3連単5頭BOX": 0, "3連単6頭BOX": 58150.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 620.0, "umaren": 2820.0, "umatan": 4990.0, "sanrenpuku": 10150.0, "sanrentan": 58150.0}}, {"date": "2025-09-27", "class": "一般C3", "distance": 1400, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 4, "taikou": 2, "anaume": 3, "renshita": 6, "star": 8, "himo": 10, "first": 8, "second": 5, "third": 12, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 2490.0, "umaren": 5930.0, "umatan": 14350.0, "sanrenpuku": 16600.0, "sanrentan": 111240.0}}, {"date": "2025-09-28", "class": "3歳", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": true, "honmei": 10, "taikou": 11, "anaume": 1, "renshita": 8, "star": 4, "himo": 3, "first": 3, "second": 1, "third": 12, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 2020.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 460.0, "umaren": 2020.0, "umatan": 3540.0, "sanrenpuku": 8950.0, "sanrentan": 43880.0}}, {"date": "2025-10-04", "class": "一般C2", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 11, "anaume": 2, "renshita": 10, "star": 6, "himo": 4, "first": 8, "second": 7, "third": 2, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1310.0, "umaren": 4450.0, "umatan": 10610.0, "sanrenpuku": 13590.0, "sanrentan": 124660.0}}, {"date": "2025-10-05", "class": "一般C3", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 4, "taikou": 10, "anaume": 12, "renshita": 1, "star": 7, "himo": 3, "first": 4, "second": 2, "third": 12, "has_himo": true, "hits": {"単◎": 610.0, "単◎○": 610.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 610.0, "umaren": 8140.0, "umatan": 15040.0, "sanrenpuku": 19640.0, "sanrentan": 146960.0}}, {"date": "2025-10-11", "class": "一般C3", "distance": 1600, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 7, "anaume": 9, "renshita": 10, "star": 4, "himo": 1, "first": 4, "second": 11, "third": 3, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 280.0, "umaren": 1400.0, "umatan": 2070.0, "sanrenpuku": 15870.0, "sanrentan": 49040.0}}, {"date": "2025-10-12", "class": "一般C3", "distance": 1600, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 8, "taikou": 11, "anaume": 2, "renshita": 9, "star": 10, "himo": 7, "first": 8, "second": 7, "third": 11, "has_himo": true, "hits": {"単◎": 310.0, "単◎○": 310.0, "馬連◎○-ALL": 2960.0, "馬単◎○-ALL": 4990.0, "馬単◎○-ALL(マ)": 4990.0, "馬連BOX": 2960.0, "3連複6頭BOX": 3480.0, "3連単◎軸マ": 20650.0, "3連単5頭BOX": 0, "3連単6頭BOX": 20650.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 310.0, "umaren": 2960.0, "umatan": 4990.0, "sanrenpuku": 3480.0, "sanrentan": 20650.0}}, {"date": "2025-10-18", "class": "一般C3", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 8, "anaume": 9, "renshita": 1, "star": 3, "himo": 5, "first": 8, "second": 6, "third": 2, "has_himo": true, "hits": {"単◎": 0, "単◎○": 400.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 400.0, "umaren": 1940.0, "umatan": 3300.0, "sanrenpuku": 5000.0, "sanrentan": 23030.0}}, {"date": "2025-10-19", "class": "一般C1", "distance": 1600, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 10, "taikou": 5, "anaume": 1, "renshita": 3, "star": 2, "himo": 9, "first": 2, "second": 10, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 1510.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 2600.0, "馬連BOX": 1510.0, "3連複6頭BOX": 1180.0, "3連単◎軸マ": 8640.0, "3連単5頭BOX": 0, "3連単6頭BOX": 8640.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 420.0, "umaren": 1510.0, "umatan": 2600.0, "sanrenpuku": 1180.0, "sanrentan": 8640.0}}, {"date": "2025-10-25", "class": "一般C3", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 1, "taikou": 2, "anaume": 7, "renshita": 10, "star": 11, "himo": 6, "first": 11, "second": 7, "third": 8, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 3210.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 480.0, "umaren": 3210.0, "umatan": 5800.0, "sanrenpuku": 14340.0, "sanrentan": 74730.0}}, {"date": "2025-10-26", "class": "一般C3", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 4, "taikou": 12, "anaume": 9, "renshita": 10, "star": 6, "himo": 3, "first": 6, "second": 4, "third": 12, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 1440.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 2370.0, "馬連BOX": 1440.0, "3連複6頭BOX": 4620.0, "3連単◎軸マ": 19810.0, "3連単5頭BOX": 19810.0, "3連単6頭BOX": 19810.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 490.0, "umaren": 1440.0, "umatan": 2370.0, "sanrenpuku": 4620.0, "sanrentan": 19810.0}}, {"date": "2025-11-01", "class": "一般C2", "distance": 1300, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 12, "taikou": 7, "anaume": 1, "renshita": 11, "star": 2, "himo": 6, "first": 4, "second": 11, "third": 9, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 710.0, "umaren": 2210.0, "umatan": 3950.0, "sanrenpuku": 2900.0, "sanrentan": 14990.0}}, {"date": "2025-11-02", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 12, "taikou": 2, "anaume": 1, "renshita": 5, "star": 6, "himo": 10, "first": 12, "second": 4, "third": 10, "has_himo": true, "hits": {"単◎": 430.0, "単◎○": 430.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 430.0, "umaren": 1780.0, "umatan": 2910.0, "sanrenpuku": 3650.0, "sanrentan": 17570.0}}, {"date": "2025-11-08", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 7, "taikou": 6, "anaume": 2, "renshita": 3, "star": 4, "himo": 5, "first": 5, "second": 4, "third": 8, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 3040.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 390.0, "umaren": 3040.0, "umatan": 5650.0, "sanrenpuku": 10770.0, "sanrentan": 55910.0}}, {"date": "2025-11-09", "class": "一般C3", "distance": 1400, "baba": "不良", "kisha": true, "is_3sai": false, "honmei": 10, "taikou": 6, "anaume": 4, "renshita": 9, "star": 1, "himo": 5, "first": 9, "second": 11, "third": 10, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 780.0, "umaren": 7710.0, "umatan": 12790.0, "sanrenpuku": 10760.0, "sanrentan": 67560.0}}, {"date": "2025-11-15", "class": "一般C3", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 7, "anaume": 3, "renshita": 11, "star": 9, "himo": 4, "first": 11, "second": 12, "third": 2, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 310.0, "umaren": 1610.0, "umatan": 2510.0, "sanrenpuku": 4570.0, "sanrentan": 17960.0}}, {"date": "2025-11-16", "class": "一般C1", "distance": 1300, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 8, "anaume": 5, "renshita": 11, "star": 9, "himo": 12, "first": 12, "second": 1, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 540.0, "umaren": 6150.0, "umatan": 9870.0, "sanrenpuku": 9670.0, "sanrentan": 65430.0}}, {"date": "2025-11-23", "class": "一般C3", "distance": 1600, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 5, "anaume": 1, "renshita": 7, "star": 8, "himo": 6, "first": 2, "second": 11, "third": 5, "has_himo": true, "hits": {"単◎": 360.0, "単◎○": 360.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 360.0, "umaren": 1800.0, "umatan": 4280.0, "sanrenpuku": 5420.0, "sanrentan": 29600.0}}, {"date": "2025-11-24", "class": "一般C3", "distance": 1600, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 4, "anaume": 9, "renshita": 7, "star": 8, "himo": 10, "first": 9, "second": 8, "third": 6, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 620.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 410.0, "umaren": 620.0, "umatan": 1370.0, "sanrenpuku": 2920.0, "sanrentan": 12780.0}}, {"date": "2025-11-29", "class": "一般C2", "distance": 1400, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 12, "taikou": 9, "anaume": 3, "renshita": 10, "star": 8, "himo": 11, "first": 8, "second": 12, "third": 5, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 9490.0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 20970.0, "馬連BOX": 9490.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1590.0, "umaren": 9490.0, "umatan": 20970.0, "sanrenpuku": 34520.0, "sanrentan": 298590.0}}, {"date": "2025-11-30", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 11, "taikou": 3, "anaume": 10, "renshita": 1, "star": 4, "himo": 8, "first": 5, "second": 11, "third": 10, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1300.0, "umaren": 4760.0, "umatan": 9220.0, "sanrenpuku": 12920.0, "sanrentan": 104270.0}}, {"date": "2025-12-06", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 7, "taikou": 11, "anaume": 10, "renshita": 2, "star": 3, "himo": 4, "first": 2, "second": 10, "third": 3, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 4050.0, "3連複6頭BOX": 9650.0, "3連単◎軸マ": 0, "3連単5頭BOX": 52360.0, "3連単6頭BOX": 52360.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 620.0, "umaren": 4050.0, "umatan": 7160.0, "sanrenpuku": 9650.0, "sanrentan": 52360.0}}, {"date": "2025-12-07", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 6, "anaume": 7, "renshita": 11, "star": 12, "himo": 5, "first": 12, "second": 7, "third": 10, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 2090.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 630.0, "umaren": 2090.0, "umatan": 4040.0, "sanrenpuku": 14810.0, "sanrentan": 56250.0}}, {"date": "2025-12-13", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 12, "taikou": 1, "anaume": 5, "renshita": 10, "star": 11, "himo": 6, "first": 2, "second": 1, "third": 7, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1430.0, "umaren": 4940.0, "umatan": 11540.0, "sanrenpuku": 16100.0, "sanrentan": 126790.0}}, {"date": "2025-12-14", "class": "一般C1", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 6, "taikou": 12, "anaume": 10, "renshita": 4, "star": 3, "himo": 5, "first": 8, "second": 7, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1050.0, "umaren": 2040.0, "umatan": 4890.0, "sanrenpuku": 1850.0, "sanrentan": 18740.0}}, {"date": "2025-12-20", "class": "一般C3", "distance": 1400, "baba": "稍重", "kisha": true, "is_3sai": false, "honmei": 2, "taikou": 10, "anaume": 1, "renshita": 4, "star": 12, "himo": 7, "first": 10, "second": 4, "third": 7, "has_himo": true, "hits": {"単◎": 0, "単◎○": 1170.0, "馬連◎○-ALL": 4760.0, "馬単◎○-ALL": 8500.0, "馬単◎○-ALL(マ)": 8500.0, "馬連BOX": 4760.0, "3連複6頭BOX": 12690.0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 83240.0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1170.0, "umaren": 4760.0, "umatan": 8500.0, "sanrenpuku": 12690.0, "sanrentan": 83240.0}}, {"date": "2025-12-21", "class": "一般C3", "distance": 1400, "baba": "重", "kisha": true, "is_3sai": false, "honmei": 12, "taikou": 1, "anaume": 3, "renshita": 6, "star": 11, "himo": 5, "first": 2, "second": 6, "third": 4, "has_himo": true, "hits": {"単◎": 0, "単◎○": 0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1610.0, "umaren": 11310.0, "umatan": 20680.0, "sanrenpuku": 21850.0, "sanrentan": 143800.0}}, {"date": "2025-12-28", "class": "一般C2", "distance": 1600, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 3, "taikou": 9, "anaume": 10, "renshita": 5, "star": 1, "himo": 2, "first": 3, "second": 11, "third": 6, "has_himo": true, "hits": {"単◎": 700.0, "単◎○": 700.0, "馬連◎○-ALL": 0, "馬単◎○-ALL": 0, "馬単◎○-ALL(マ)": 0, "馬連BOX": 0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 700.0, "umaren": 2030.0, "umatan": 4250.0, "sanrenpuku": 8780.0, "sanrentan": 37470.0}}, {"date": "2025-12-29", "class": "一般C1", "distance": 1400, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 9, "taikou": 4, "anaume": 1, "renshita": 6, "star": 12, "himo": 2, "first": 4, "second": 9, "third": 5, "has_himo": true, "hits": {"単◎": 0, "単◎○": 460.0, "馬連◎○-ALL": 6660.0, "馬単◎○-ALL": 9830.0, "馬単◎○-ALL(マ)": 9830.0, "馬連BOX": 6660.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 460.0, "umaren": 6660.0, "umatan": 9830.0, "sanrenpuku": 22280.0, "sanrentan": 104440.0}}, {"date": "2025-12-31", "class": "一般C3", "distance": 1300, "baba": "良", "kisha": true, "is_3sai": false, "honmei": 3, "taikou": 10, "anaume": 11, "renshita": 2, "star": 1, "himo": 12, "first": 10, "second": 12, "third": 5, "has_himo": true, "hits": {"単◎": 0, "単◎○": 1000.0, "馬連◎○-ALL": 1690.0, "馬単◎○-ALL": 3960.0, "馬単◎○-ALL(マ)": 3960.0, "馬連BOX": 1690.0, "3連複6頭BOX": 0, "3連単◎軸マ": 0, "3連単5頭BOX": 0, "3連単6頭BOX": 0}, "costs": {"単◎": 100, "単◎○": 200, "馬連◎○-ALL": 900, "馬単◎○-ALL": 1000, "馬単◎○-ALL(マ)": 2000, "馬連BOX": 1500, "3連複6頭BOX": 2000, "3連単◎軸マ": 6000, "3連単5頭BOX": 6000, "3連単6頭BOX": 12000}, "payouts": {"tansho": 1000.0, "umaren": 1690.0, "umatan": 3960.0, "sanrenpuku": 3010.0, "sanrentan": 23350.0}}];
+const BET_TYPES = ["単◎", "単◎○", "馬連◎○-ALL", "馬単◎○-ALL", "馬単◎○-ALL(マ)", "馬連BOX", "3連複6頭BOX", "3連単◎軸マ", "3連単5頭BOX", "3連単6頭BOX"];
+let filteredData = [...ALL_DATA];
+let sortCol = 'date';
+let sortAsc = false;
+let charts = {};
+
+function init() {
+  const dists = [...new Set(ALL_DATA.map(r => r.distance).filter(Boolean))].sort((a,b) => a-b);
+  const babas = [...new Set(ALL_DATA.map(r => r.baba).filter(Boolean))].sort();
+  const classes = [...new Set(ALL_DATA.map(r => r.class).filter(Boolean))].sort();
+  populateSelect('f-dist', dists, v => v + 'm');
+  populateSelect('f-baba', babas);
+  populateSelect('f-class', classes);
+  const pivotSel = document.getElementById('pivot-bet');
+  BET_TYPES.forEach(bt => {
+    const opt = document.createElement('option');
+    opt.value = bt; opt.textContent = bt;
+    pivotSel.appendChild(opt);
+  });
+  pivotSel.value = '3連単5頭BOX';
+  applyFilters();
+}
+
+function populateSelect(id, values, fmt) {
+  const sel = document.getElementById(id);
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = fmt ? fmt(v) : v;
+    sel.appendChild(opt);
+  });
+}
+
+function applyFilters() {
+  const dist = document.getElementById('f-dist').value;
+  const baba = document.getElementById('f-baba').value;
+  const kisha = document.getElementById('f-kisha').value;
+  const excl = document.getElementById('f-exclude').value;
+  const cls = document.getElementById('f-class').value;
+  filteredData = ALL_DATA.filter(r => {
+    if (dist && r.distance != parseInt(dist)) return false;
+    if (baba && r.baba !== baba) return false;
+    if (kisha === 'true' && !r.kisha) return false;
+    if (kisha === 'false' && r.kisha !== false) return false;
+    if (excl === '800m3sai' && (r.distance === 800 || r.is_3sai)) return false;
+    if (cls && r.class !== cls) return false;
+    return true;
+  });
+  renderAll();
+}
+
+function resetFilters() {
+  document.querySelectorAll('.filters select').forEach(s => s.value = '');
+  applyFilters();
+}
+
+function renderAll() {
+  renderCards();
+  renderSummary();
+  renderDataTable();
+  renderCharts();
+  renderPivot();
+}
+
+function calcSummary(data) {
+  return BET_TYPES.map(bt => {
+    let cost = 0, ret = 0, hits = 0, valid = 0;
+    data.forEach(r => {
+      const h = r.hits[bt];
+      if (h === null || h === undefined) return;
+      valid++;
+      cost += r.costs[bt];
+      ret += h;
+      if (h > 0) hits++;
+    });
+    const rate = cost > 0 ? ret / cost * 100 : 0;
+    return { bt, valid, hits, cost, ret, rate };
+  });
+}
+
+function renderCards() {
+  const n = filteredData.length;
+  const summary = calcSummary(filteredData);
+  const best = summary.reduce((a, b) => a.rate > b.rate ? a : b);
+  const avgRate = summary.reduce((sum, s) => sum + s.rate, 0) / summary.length;
+  const profitBets = summary.filter(s => s.rate >= 100);
+  const cardsHtml = `
+    <div class="card"><div class="label">対象レース数</div><div class="value">${n}</div></div>
+    <div class="card"><div class="label">最高回収率</div><div class="value ${best.rate >= 100 ? 'positive' : 'negative'}">${best.rate.toFixed(1)}%</div><div class="label">${best.bt}</div></div>
+    <div class="card"><div class="label">平均回収率（全賭式）</div><div class="value ${avgRate >= 100 ? 'positive' : 'negative'}">${avgRate.toFixed(1)}%</div></div>
+    <div class="card"><div class="label">100%超え賭式</div><div class="value ${profitBets.length > 0 ? 'positive' : 'negative'}">${profitBets.length}/10</div></div>
+  `;
+  document.getElementById('cards').innerHTML = cardsHtml;
+}
+
+function renderSummary() {
+  const summary = calcSummary(filteredData);
+  document.getElementById('summary-count').textContent = filteredData.length;
+  const tbody = document.querySelector('#summary-table tbody');
+  tbody.innerHTML = summary.map(s => `
+    <tr>
+      <td>${s.bt}</td><td>${s.valid}</td><td>${s.hits}</td>
+      <td>${s.valid > 0 ? (s.hits/s.valid*100).toFixed(1) : 0}%</td>
+      <td>&yen;${s.cost.toLocaleString()}</td><td>&yen;${Math.round(s.ret).toLocaleString()}</td>
+      <td class="${s.rate >= 100 ? 'star' : ''}">${s.rate.toFixed(1)}%${s.rate >= 100 ? ' ★' : ''}</td>
+    </tr>
+  `).join('');
+}
+
+function renderDataTable() {
+  const sorted = [...filteredData].sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (va === null || va === undefined) va = '';
+    if (vb === null || vb === undefined) vb = '';
+    if (typeof va === 'number') return sortAsc ? va - vb : vb - va;
+    return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+  const tbody = document.querySelector('#data-table tbody');
+  tbody.innerHTML = sorted.map(r => {
+    const p = r.payouts;
+    return `<tr>
+      <td>${r.date}</td><td>${r.class}</td><td>${r.distance || ''}</td>
+      <td>${r.baba}</td><td>${r.kisha ? '○' : r.kisha === false ? '×' : '?'}</td>
+      <td>${r.honmei || ''}</td><td>${r.taikou || ''}</td>
+      <td>${r.anaume || ''}</td><td>${r.renshita || ''}</td>
+      <td>${r.star || ''}</td><td>${r.himo || ''}</td>
+      <td>${r.first || ''}</td><td>${r.second || ''}</td><td>${r.third || ''}</td>
+      <td>${p.tansho ? p.tansho.toLocaleString() : ''}</td>
+      <td>${p.umaren ? p.umaren.toLocaleString() : ''}</td>
+      <td>${p.umatan ? p.umatan.toLocaleString() : ''}</td>
+      <td>${p.sanrenpuku ? p.sanrenpuku.toLocaleString() : ''}</td>
+      <td>${p.sanrentan ? p.sanrentan.toLocaleString() : ''}</td>
+    </tr>`;
+  }).join('');
+  document.querySelectorAll('#data-table th .sort-icon').forEach(el => el.textContent = '');
+  const th = document.querySelector(`#data-table th[data-col="${sortCol}"]`);
+  if (th) th.querySelector('.sort-icon').textContent = sortAsc ? ' ▲' : ' ▼';
+}
+
+function sortTable(col) {
+  if (sortCol === col) { sortAsc = !sortAsc; }
+  else { sortCol = col; sortAsc = true; }
+  renderDataTable();
+}
+
+function renderCharts() {
+  renderBetChart();
+  renderDistChart();
+  renderBabaChart();
+  renderKishaChart();
+}
+
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+Chart.defaults.set('plugins.datalabels', { display: false });
+
+function renderBetChart() {
+  destroyChart('chart-bets');
+  const summary = calcSummary(filteredData);
+  charts['chart-bets'] = new Chart(document.getElementById('chart-bets'), {
+    type: 'bar',
+    plugins: [ChartDataLabels],
+    data: {
+      labels: summary.map(s => s.bt),
+      datasets: [{
+        label: '回収率 (%)',
+        data: summary.map(s => s.rate),
+        backgroundColor: summary.map(s => s.rate >= 100 ? '#4ade80' : '#f87171'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      layout: { padding: { top: 20 } },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          display: true, anchor: 'end', align: 'end',
+          color: '#e2e8f0', font: { weight: 'bold', size: 12 },
+          formatter: v => v.toFixed(1) + '%',
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: v => v + '%' } },
+        x: { ticks: { color: '#94a3b8', maxRotation: 45 } }
+      },
+    }
+  });
+}
+
+function renderDistChart() {
+  destroyChart('chart-dist');
+  const dists = [...new Set(filteredData.map(r => r.distance).filter(Boolean))].sort((a,b)=>a-b);
+  const selectedBets = ['3連単5頭BOX', '馬単◎○-ALL', '馬連BOX'];
+  const colors = ['#4ade80', '#38bdf8', '#a78bfa'];
+  const datasets = selectedBets.map((bt, i) => ({
+    label: bt,
+    data: dists.map(d => { const dd = filteredData.filter(r => r.distance === d); const s = calcSummary(dd).find(s => s.bt === bt); return s ? s.rate : 0; }),
+    backgroundColor: colors[i] + '99', borderRadius: 3,
+  }));
+  charts['chart-dist'] = new Chart(document.getElementById('chart-dist'), {
+    type: 'bar',
+    data: { labels: dists.map(d => d + 'm'), datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#94a3b8' } } },
+      scales: {
+        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: v => v + '%' } },
+        x: { ticks: { color: '#94a3b8' } }
+      }
+    }
+  });
+}
+
+function renderBabaChart() {
+  destroyChart('chart-baba');
+  const babas = ['良', '稍重', '重', '不良'];
+  const selectedBets = ['3連単5頭BOX', '馬単◎○-ALL', '馬連BOX'];
+  const colors = ['#4ade80', '#38bdf8', '#a78bfa'];
+  const datasets = selectedBets.map((bt, i) => ({
+    label: bt,
+    data: babas.map(b => { const dd = filteredData.filter(r => r.baba === b); const s = calcSummary(dd).find(s => s.bt === bt); return s ? s.rate : 0; }),
+    backgroundColor: colors[i] + '99', borderRadius: 3,
+  }));
+  charts['chart-baba'] = new Chart(document.getElementById('chart-baba'), {
+    type: 'bar',
+    data: { labels: babas, datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#94a3b8' } } },
+      scales: {
+        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: v => v + '%' } },
+        x: { ticks: { color: '#94a3b8' } }
+      }
+    }
+  });
+}
+
+function renderKishaChart() {
+  destroyChart('chart-kisha');
+  const kishaData = filteredData.filter(r => r.kisha === true);
+  const nonKishaData = filteredData.filter(r => r.kisha === false);
+  const selectedBets = ['馬連◎○-ALL', '馬単◎○-ALL', '3連単5頭BOX', '3連単6頭BOX'];
+  const kSummary = calcSummary(kishaData);
+  const nSummary = calcSummary(nonKishaData);
+  charts['chart-kisha'] = new Chart(document.getElementById('chart-kisha'), {
+    type: 'bar',
+    data: {
+      labels: selectedBets,
+      datasets: [
+        {
+          label: '記者選抜 (' + kishaData.length + 'R)',
+          data: selectedBets.map(bt => { const s = kSummary.find(s => s.bt === bt); return s ? s.rate : 0; }),
+          backgroundColor: '#4ade8099', borderRadius: 3,
+        },
+        {
+          label: '非記者選抜 (' + nonKishaData.length + 'R)',
+          data: selectedBets.map(bt => { const s = nSummary.find(s => s.bt === bt); return s ? s.rate : 0; }),
+          backgroundColor: '#f8717199', borderRadius: 3,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#94a3b8' } } },
+      scales: {
+        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: v => v + '%' } },
+        x: { ticks: { color: '#94a3b8' } }
+      }
+    }
+  });
+}
+
+function renderPivot() {
+  const bt = document.getElementById('pivot-bet').value;
+  const dists = [...new Set(filteredData.map(r => r.distance).filter(Boolean))].sort((a,b)=>a-b);
+  const babas = ['良', '稍重', '重', '不良'];
+  const thead = document.querySelector('#pivot-table thead tr');
+  thead.innerHTML = '<th>距離＼馬場</th>' + babas.map(b => `<th>${b}</th>`).join('') + '<th>合計</th>';
+  const tbody = document.querySelector('#pivot-table tbody');
+  let rows = '';
+  dists.forEach(d => {
+    rows += '<tr><td>' + d + 'm</td>';
+    babas.forEach(b => {
+      const dd = filteredData.filter(r => r.distance === d && r.baba === b);
+      const s = calcSummary(dd).find(s => s.bt === bt);
+      const rate = s && s.cost > 0 ? s.rate : null;
+      rows += `<td class="${rate !== null && rate >= 100 ? 'star' : ''}">${rate !== null ? rate.toFixed(1) + '% (' + dd.length + 'R)' : '-'}</td>`;
+    });
+    const dd = filteredData.filter(r => r.distance === d);
+    const s = calcSummary(dd).find(s => s.bt === bt);
+    const rate = s && s.cost > 0 ? s.rate : null;
+    rows += `<td class="${rate !== null && rate >= 100 ? 'star' : ''}">${rate !== null ? rate.toFixed(1) + '% (' + dd.length + 'R)' : '-'}</td></tr>`;
+  });
+  rows += '<tr><td><strong>合計</strong></td>';
+  babas.forEach(b => {
+    const dd = filteredData.filter(r => r.baba === b);
+    const s = calcSummary(dd).find(s => s.bt === bt);
+    const rate = s && s.cost > 0 ? s.rate : null;
+    rows += `<td class="${rate !== null && rate >= 100 ? 'star' : ''}"><strong>${rate !== null ? rate.toFixed(1) + '% (' + dd.length + 'R)' : '-'}</strong></td>`;
+  });
+  const totalS = calcSummary(filteredData).find(s => s.bt === bt);
+  rows += `<td class="${totalS.rate >= 100 ? 'star' : ''}"><strong>${totalS.rate.toFixed(1)}% (${filteredData.length}R)</strong></td></tr>`;
+  tbody.innerHTML = rows;
+}
+
+function showTab(tab) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-detail').style.display = tab === 'detail' ? '' : 'none';
+  document.getElementById('tab-pivot').style.display = tab === 'pivot' ? '' : 'none';
+  event.target.classList.add('active');
+  if (tab === 'pivot') renderPivot();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
