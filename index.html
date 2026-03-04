@@ -205,6 +205,7 @@ function init() {
     pivotSel.appendChild(opt);
   });
   pivotSel.value = '3連単5頭BOX';
+  document.getElementById('f-exclude').value = '800m3sai';
   applyFilters();
 }
 
@@ -238,6 +239,7 @@ function applyFilters() {
 
 function resetFilters() {
   document.querySelectorAll('.filters select').forEach(s => s.value = '');
+  document.getElementById('f-exclude').value = '800m3sai';
   applyFilters();
 }
 
